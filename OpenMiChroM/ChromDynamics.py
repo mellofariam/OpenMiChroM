@@ -415,7 +415,7 @@ class MiChroM:
         self.forceDict["SphericalConfinementLJ"] = sphericalForce
 
         
-    def addFENEBonds(self, kFb=30.0, bonds=None):
+    def addFENEBonds(self, kFb=30.0, bonds=None, chainIndices=None):
         R"""
         Adds FENE (Finite Extensible Nonlinear Elastic) bonds to the system.
 
@@ -438,6 +438,9 @@ class MiChroM:
         Raises:
             ValueError: If any of the loci indices are out of bounds.
         """
+        if chainIndices is None:
+            chainIndices = list(range(len(self.chains)))
+
         # Initialize the FENE bond force if not already done
         if "FENEBond" not in self.forceDict:
             # Define the FENE bond potential
@@ -455,7 +458,8 @@ class MiChroM:
 
         if bonds is None:
             # Add bonds between neighboring loci in the chains
-            for start, end, isRing in self.chains:
+            for idx in chainIndices:
+                start, end, isRing = self.chains[idx]
                 for j in range(start, end):
                     i1, i2 = j, j + 1
                     if i1 >= self.N or i2 >= self.N:
@@ -483,7 +487,7 @@ class MiChroM:
                 self.bondsForException.append((i, j))
 
 
-    def addAngles(self, kA=2.0):
+    def addAngles(self, kA=2.0, chainIndices=None):
         R"""
         Adds an angular potential between bonds connecting beads i-1, i, and i+1.
 
@@ -502,9 +506,14 @@ class MiChroM:
         Raises:
             ValueError: If kA is an array and its length does not match the expected number of angles.
         """
+        # Default selection of all chains when chainIndices is None
+        if chainIndices is None:
+            chainIndices = list(range(len(self.chains)))
+
         # Determine the number of angles based on chains
         num_angles = 0
-        for start, end, isRing in self.chains:
+        for idx in chainIndices:
+            start, end, isRing = self.chains[idx]
             num_angles += (end - start - 1)
             if isRing:
                 num_angles += 2  # For the two additional angles in a ring
@@ -530,7 +539,8 @@ class MiChroM:
         angle_index = 0  # Index to track position in kA_array
 
         # Add angles for each chain
-        for start, end, isRing in self.chains:
+        for idx in chainIndices:
+            start, end, isRing = self.chains[idx]
             # For linear chains
             for j in range(start + 1, end):
                 i1, i2, i3 = j - 1, j, j + 1
