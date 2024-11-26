@@ -414,6 +414,38 @@ class MiChroM:
         # Add the force to the force dictionary
         self.forceDict["SphericalConfinementLJ"] = sphericalForce
 
+
+    def addLaminaInteraction(self, radius="density", density=0.1, mu=3.22, rc=1.78, eLam=1.0, subcompartments=["B2", "B3"]):
+
+        if radius == "density":
+            radius = (3 * self.N / (4 * 3.141592653589793 * density)) ** (1 / 3.)
+
+        laminaForce = self.mm.CustomExternalForce(
+            "- eLamina * 0.5 * (1.0 + tanh( muLamina * (rcLamina - distLamina) ));"
+            "distLamina = Rlamina - sqrt(x^2 + y^2 + z^2)"
+        )
+
+        laminaForce.addGlobalParameter("muLamina", mu)
+        laminaForce.addGlobalParameter("rcLamina", rc)
+        laminaForce.addGlobalParameter("Rlamina", radius)
+
+        if isinstance(eLam, float):
+            laminaForce.addGlobalParameter("eLamina", eLam)
+
+            laminaBeads = [i for i, subcmpt in enumerate(self.type_list_letter) if subcmpt in subcompartments]
+            for i in laminaBeads:
+                laminaForce.addParticle(int(i))
+        elif isinstance(eLam, dict):
+            assert set(list(eLam.keys())) == set(subcompartments)
+
+            laminaForce.addPerParticleParameter("eLamina")
+
+            laminaBeads = [i for i, subcmpt in enumerate(self.type_list_letter) if subcmpt in subcompartments]
+            for i in laminaBeads:
+                laminaForce.addParticle(int(i), [eLam[self.type_list_letter[i]]])
+
+        self.forceDict["LaminaForce"] = laminaForce
+
         
     def addFENEBonds(self, kFb=30.0, bonds=None, chainIndices=None):
         R"""
