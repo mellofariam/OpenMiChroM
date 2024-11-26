@@ -421,7 +421,7 @@ class MiChroM:
             radius = (3 * self.N / (4 * 3.141592653589793 * density)) ** (1 / 3.)
 
         laminaForce = self.mm.CustomExternalForce(
-            "- eLamina * 0.5 * (1.0 + tanh( muLamina * (rcLamina - distLamina) ));"
+            "eLamina * 0.5 * (1.0 + tanh( muLamina * (rcLamina - distLamina) ));"
             "distLamina = Rlamina - sqrt(x^2 + y^2 + z^2)"
         )
 
