@@ -480,55 +480,73 @@ class MiChroM:
         self.forceDict["SphericalConfinementLJ"] = sphericalForce
 
     def addLaminaInteraction(
-        self,
-        radius="density",
-        density=0.1,
-        mu=3.22,
-        rc=1.78,
-        eLam=1.0,
-        subcompartments=["B2", "B3"],
-    ):
+            self,
+            radius=None,
+            density=0.1,
+            mu=3.22,
+            rc=1.78,
+            eLam=1.0,
+            subcompartments=["B2", "B3"],
+            beadIndices=None,
+        ):
+            """
+            Adds lamina-chromatin interaction to the system.
 
-        if radius == "density":
-            radius = (
-                3 * self.N / (4 * 3.141592653589793 * density)
-            ) ** (1 / 3.0)
+            Parameters:
+            - radius (float): The radius of the lamina. If None, it is calculated based on the system density.
+            - density (float): The chromatin density of the system. Used to calculate the nucleus radius if radius is None.
+            - mu (float): The parameter for the lamina force equation. Sets the steepness of the force.
+            - rc (float): The parameter for the lamina force equation. Sets the distance at which the force is half of its maximum value.
+            - eLam (float or dict): The energy parameter for the lamina force equation. If float, it is applied to all particles. If dict, it is applied per particle type.
+            - beadIndices (list): The list of bead indices to which the lamina force is applied. If None, all beads in the specified subcompartments are used. Can't be None if subcompartments is None.
+            - subcompartments (list): The list of subcompartments to which the lamina force is applied. Can't be None if bead_indices is None.
 
-        laminaForce = self.mm.CustomExternalForce(
-            "eLamina * 0.5 * (1.0 + tanh( muLamina * (rcLamina - distLamina) ));"
-            "distLamina = Rlamina - sqrt(x^2 + y^2 + z^2)"
-        )
+            Returns:
+            None
+            """
+            
+            if radius is None:
+                radius = (
+                    3 * self.N / (4 * 3.141592653589793 * density)
+                ) ** (1 / 3.0)
 
-        laminaForce.addGlobalParameter("muLamina", mu)
-        laminaForce.addGlobalParameter("rcLamina", rc)
-        laminaForce.addGlobalParameter("Rlamina", radius)
-
-        if isinstance(eLam, float):
-            laminaForce.addGlobalParameter("eLamina", eLam)
-
-            laminaBeads = [
-                i
-                for i, subcmpt in enumerate(self.type_list_letter)
-                if subcmpt in subcompartments
-            ]
-            for i in laminaBeads:
-                laminaForce.addParticle(int(i))
-        elif isinstance(eLam, dict):
-            assert set(list(eLam.keys())) == set(subcompartments)
-
-            laminaForce.addPerParticleParameter("eLamina")
-
-            laminaBeads = [
-                i
-                for i, subcmpt in enumerate(self.type_list_letter)
-                if subcmpt in subcompartments
-            ]
-            for i in laminaBeads:
-                laminaForce.addParticle(
-                    int(i), [eLam[self.type_list_letter[i]]]
+            if beadIndices is None and subcompartments is None:
+                raise ValueError(
+                    "Either `beadIndices` or `subcompartments` must be provided."
                 )
+            if beadIndices is None:
+                beadIndices = [
+                    i
+                    for i, subcmpt in enumerate(self.type_list_letter)
+                    if subcmpt in subcompartments
+                ]
 
-        self.forceDict["LaminaForce"] = laminaForce
+            laminaForce = self.mm.CustomExternalForce(
+                "eLamina * 0.5 * (1.0 + tanh( muLamina * (rcLamina - distLamina) ));"
+                "distLamina = Rlamina - sqrt(x^2 + y^2 + z^2)"
+            )
+
+            laminaForce.addGlobalParameter("muLamina", mu)
+            laminaForce.addGlobalParameter("rcLamina", rc)
+            laminaForce.addGlobalParameter("Rlamina", radius)
+
+            if isinstance(eLam, float):
+                laminaForce.addGlobalParameter("eLamina", eLam)
+
+                for i in beadIndices:
+                    laminaForce.addParticle(int(i))
+
+            elif isinstance(eLam, dict):
+                assert set(list(eLam.keys())) == set(subcompartments)
+
+                laminaForce.addPerParticleParameter("eLamina")
+
+                for i in beadIndices:
+                    laminaForce.addParticle(
+                        int(i), [eLam[self.type_list_letter[i]]]
+                    )
+
+            self.forceDict["LaminaForce"] = laminaForce
 
     def addFENEBonds(self, kFb=30.0, bonds=None, chainIndices=None):
         R"""
