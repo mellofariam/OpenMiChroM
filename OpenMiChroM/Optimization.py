@@ -28,6 +28,284 @@ import os
 import pandas as pd
 import warnings
 
+
+class AdamMiChroMTraining:
+    R"""
+    The :class:`~.AdamMiChroMTraining` class performs the parameters training for MiChroM with the Adam algorithm. 
+    
+    Details about the methodology are decribed in "Zhang, Bin, and Peter G. Wolynes. "Topology, structures, and energy landscapes of human chromosomes." Proceedings of the National Academy of Sciences 112.19 (2015): 6062-6067."
+    
+    
+    The :class:`~.AdamTraining` class receive a Hi-C matrix (text file) as input. The parameters :math:`\mu` (mu) and rc are part of the probability of crosslink function :math:`f(r_{i,j}) = \frac{1}{2}\left( 1 + tanh\left[\mu(r_c - r_{i,j}\right] \right)`, where :math:`r_{i,j}` is the spatial distance between loci (beads) *i* and *j*.
+    
+    Args:
+        mu (float, required):
+            Parameter in the probability of crosslink function. (Default value = 2.0).
+        rc (float, required):
+            Parameter in the probability of crosslink function. (Default value = 2.0).
+        eta (float, required):
+            Learning rate applied in each step (Default value = 0.01).
+        beta1 (float, required):
+            The hyper-parameter of Adam are initial decay rates used when estimating the first and second moments of the gradient. (Default value = 0.9).
+        beta2 (float, required):
+            The hyper-parameter of Adam are initial decay rates used when estimating the first and second moments of the gradient. (Default value = 0.999).
+        it (int, required)
+            The iteration step  
+        method (str, required):
+            'classic':  Adam
+            'qh': quassi-hyperbolic momentum Adam  
+        
+    """
+    
+    # Remove biases and hold a data storage for velocity and momentum changes phi
+    def __init__(self, mu=2.0, rc = 2.0, eta=0.01, beta1=0.9, beta2=0.999, epsilon=1e-8, it=1, updateNeeded=True, update_storagePath='', method='classic'):
+        self.m_dw, self.v_dw = None, None
+        self.t = it
+        
+
+        # constants
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.epsilon = epsilon
+        self.eta = eta
+        self.mu = mu
+        self.rc = rc
+        self.NFrames = 0
+        self.method = method
+
+      
+        #HQ ADAM
+        self.v_1 = 0.7
+        self.v_2 = 1.0
+        
+        # to store the updating parameters
+        if update_storagePath != '':
+            self.adamStorage = os.path.join(os.getcwd(), update_storagePath)
+        else:
+            self.adamStorage = os.path.join(os.getcwd(), 'Adam')
+        
+        os.makedirs(self.adamStorage, exist_ok=True)
+        self.updateNeeded = updateNeeded
+        
+        #this is done after to overwrite the already set values if updateNeeded was set to True
+        self._getParams() 
+
+        
+    def _saveParams(self, iteration, moment, velocity):
+        if self.updateNeeded == False:
+            return
+    
+        with open(f'{self.adamStorage}/iteration.txt', 'w') as f:
+            f.write(str(iteration))
+        np.savetxt(f'{self.adamStorage}/moment.txt', moment)
+        np.savetxt(f'{self.adamStorage}/velocity.txt', velocity)
+
+                
+    def _getParams(self):
+        if self.updateNeeded == False:
+            print('Adam Parameter Updating was not needed updateNeeded set to False')
+            return
+
+        iteration_file = f'{self.adamStorage}/iteration.txt'
+        if not os.path.exists(iteration_file) or os.stat(iteration_file).st_size == 0:
+            print(f'Warning: {iteration_file} does not exist or is empty. Starting from iteration 1.')
+            self.t = 1
+            return
+
+        with open(iteration_file, 'r') as f:
+            try:
+                self.t = int(f.read().strip())
+            except ValueError:
+                print(f'Warning: {iteration_file} contains invalid data. Starting from iteration 1.')
+                self.t = 1
+
+        if self.t == 1:
+            return
+
+        self.m_dw = np.loadtxt(f'{self.adamStorage}/moment.txt')
+        self.v_dw = np.loadtxt(f'{self.adamStorage}/velocity.txt')
+            
+        
+    def _update(self, w, dw):
+        R"""Adam optimization step. This function updates weights and biases for each step.
+        """
+
+
+        if self.m_dw is None:
+            self.m_dw = np.zeros(np.shape(dw))
+            self.v_dw = np.zeros(np.shape(dw))
+            
+        ## dw, db are from current minibatch
+        ## momentum beta 1
+        # *** weights *** #
+        self.m_dw = self.beta1*self.m_dw + (1-self.beta1)*dw
+
+        ## rms beta 2
+        # *** weights *** #
+        self.v_dw = self.beta2*self.v_dw + (1-self.beta2)*(dw**2)
+        
+
+        ## weight correction
+        m_dw_corr = self.m_dw/(1-self.beta1**self.t)
+        v_dw_corr = self.v_dw/(1-self.beta2**self.t)
+
+        ## update weights
+        if self.method == 'qh':
+            #QH Adam
+            w = w - (self.eta * ((1 - self.v_1) * dw + self.v_1 * m_dw_corr) / (np.sqrt((1 - self.v_2) * np.power(dw, 2) + self.v_2 * v_dw_corr) + self.epsilon))
+        else: # else just in case theres a type error it would go to the default adam weight calculation
+            # Adam
+             w = w - self.eta*(m_dw_corr/(np.sqrt(v_dw_corr)+self.epsilon))
+        
+        self.t += 1
+        
+        self._saveParams(self.t, self.m_dw, self.v_dw)
+        return w
+
+    
+    def reset_Pi(self):
+        R"""
+        Resets Pi matrix to zeros
+        """
+        if not hasattr(self, "phi_exp"):
+            print("Cannot reset Pi; HiC map shape unknown. Load HiC map first!")
+        else:              
+            self.Pi = np.zeros(self.phi_exp.shape)
+            self.NFrames = 0
+
+
+    def getExpData(self, HiC, centerRemove=False, centrange=[0,0], norm=True, cutoff_low=0.0, cutoff_high=1.0, KR=False, neighbors=0):
+        R"""
+        Receives the experimental Hi-C map (Full dense matrix) in a text format and performs the data normalization from Hi-C frequency/counts/reads to probability.
+        
+        Args:
+            HiC (file, required):
+                Experimental Hi-C map (Full dense matrix) in a text format.
+            centerRemove (bool, optional):
+                Whether to set the contact probability of the centromeric region to zero. (Default value: :code:`False`).
+            centrange (list, required if **centerRemove** = :code:`True`)):
+                Range of the centromeric region, *i.e.*, :code:`centrange=[i,j]`, where *i* and *j*  are the initial and final beads in the centromere. (Default value = :code:`[0,0]`).
+            cutoff (float, optional):
+                Cutoff value for reducing the noise in the original data. Values lower than the **cutoff** are considered :math:`0.0`.
+        """
+
+        # get the file extension
+        _, file_extension = os.path.splitext(HiC)
+        if file_extension == '.npy':
+            # use np.load if the file is a .npy file
+            allmap = np.load(HiC)
+        else:
+            allmap = np.loadtxt(HiC)
+
+        if KR==True:
+            allmap = self.knight_ruiz_balance(allmap)
+
+        if norm==True:
+            r=self.normalize_matrix(allmap)
+
+            for i in range(len(r)-1):
+                maxElem = r[i][i+1]
+                if (maxElem != np.max(r[i])):
+                    for j in range(len(r[i])):
+                        if maxElem != 0.0:
+                            r[i][j] = float(r[i][j] / maxElem)
+                        else:
+                            r[i][j] = 0.0 
+                        if r[i][j] > 1.0:
+                            r[i][j] = np.mean(np.diag(r,k=i))
+
+            rd = np.transpose(r) 
+            self.expHiC = r+rd + np.diag(np.ones(len(r)))
+        else:
+            self.expHiC = allmap
+        
+        if (centerRemove):
+            centrome = range(centrange[0],centrange[1])
+            self.expHiC[centrome,:] = 0.0
+            self.expHiC[:,centrome] = 0.0
+        
+        #remove noise by cutoff 
+
+        if cutoff_low>0.0:
+            self.expHiC[self.expHiC<cutoff_low] = 0.0
+        
+        if cutoff_high<1.0:
+            self.expHiC[self.expHiC>cutoff_high] = 0.0
+
+        # Remove the number of Neighbors to optimize.
+        M=self.expHiC
+        neighbor_mask = np.abs(np.subtract.outer(np.arange(len(M)), np.arange(len(M)))) <= neighbors
+        M[neighbor_mask] = 0.0
+        self.expHiC = M
+
+        self.mask = self.expHiC == 0.0
+
+        self.phi_exp = self.expHiC
+        self.reset_Pi()
+    
+    def reset_Pi(self):
+        R"""
+        Resets Pi matrix to zeros
+        """
+        if not hasattr(self, "phi_exp"):
+            print("Cannot reset Pi; HiC map shape unknown. Load HiC map first!")
+        else:              
+            self.Pi = np.zeros(self.phi_exp.shape)
+            self.NFrames = 0
+
+    def probCalc(self, state):
+        R"""
+        Calculates the contact probability matrix for a given state.
+        """
+
+        Pi = 0.5*(1.0 + np.tanh(self.mu*(self.rc - distance.cdist(state,state, 'euclidean'))))
+    
+        self.Pi += Pi
+        self.NFrames += 1
+
+    def _getGrad(self):
+        R"""
+        Calcultes the gradient function.
+        """
+        return (-self.phi_sim + self.phi_exp)
+
+    def getLamb(self, Lambdas, fixedPoints=None):
+        R"""
+        Calculates the Lagrange multipliers of each pair of interaction and returns the matrix containing the energy values for the optimization step.
+        
+        Args:
+            Lambdas (file, required):
+                The matrix containing the energies values used to make the simulation in that step. 
+            fixedPoints (list, optional):
+                List of all pairs (i,j) of interactions that will remain unchanged throughout the optimization procedure.
+        
+        Returns:
+            :math:`(N,N)` :class:`numpy.ndarray`:
+                Returns an updated matrix of interactions between each pair of bead.
+        """
+        self.phi_sim = self.Pi/self.NFrames
+        self.phi_sim[self.mask] = 0.0
+
+        grad = self._getGrad()
+
+        self.lambdas = pd.read_csv(Lambdas, sep=None, engine='python')
+        newlamb_values = self._update(self.lambdas.values, grad)
+
+
+
+        if fixedPoints == None:
+            lamb  = pd.DataFrame(newlamb_values,columns=list(self.lambdas.columns.values))
+        else:
+            for p in fixedPoints: #fixedPoints is a list of tuples for iteraction fixed i,j
+                self.mask[p] = True
+
+            lambs_final = np.where(self.mask,self.lambdas.values, newlamb_values)
+            lamb  = pd.DataFrame(lambs_final,columns=list(self.lambdas.columns.values))
+
+        self.error = np.sum(np.absolute(np.triu(self.phi_sim, k=3) - np.triu(self.phi_exp, k=3)))/np.sum(np.triu(self.phi_exp, k=3))
+
+        return (lamb)
+
 class AdamTraining:
     R"""
     The :class:`~.AdamTraining` class performs the parameters training for each selected loci pair interaction. 
