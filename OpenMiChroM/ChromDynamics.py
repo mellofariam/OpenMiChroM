@@ -1574,19 +1574,10 @@ class MiChroM:
                 print(info, file=f)
             print(simulationInfo, file=f)
             print(energyInfo, file=f)
-            print(
-                f"\nPotential energy per forceGroup:\n {self.getForces()}",
-                file=f,
-            )
+            print(f'\nPotential energy per forceGroup:\n {self.getForces()}', file=f)
 
-    def createReporters(
-        self,
-        statistics=True,
-        traj=False,
-        trajFormat="cndb",
-        energyComponents=False,
-        interval=1000,
-    ):
+    def createReporters(self, statistics=True, traj=False, trajFormat="cndb", outputName=None, energyComponents=False,
+                         interval=1000):
         R"""
         Configures and attaches reporters to the simulation for data collection during simulation runs.
         This method sets up custom reporters for the OpenMM `Simulation` object to collect simulation statistics and/or save trajectory data at specified intervals. It supports saving energies per force group and various trajectory file formats.
@@ -1598,6 +1589,9 @@ class MiChroM:
             traj (bool, optional):
                 If `True`, attaches a reporter to save trajectory data during the simulation.
                 (Default: `False`)
+            file_name (str, optional):
+                The file name for saving trajectory data. If `None`, defaults to `self.name`.
+                (Default: `None`)
             trajFormat (str, optional):
                 The file format to save the trajectory data. Options are `'cndb'`, `'swb'`,`'ndb'`, `'pdb'`, `'gro'`, `'xyz'`.
                 (Default: `'cndb'`)
@@ -1609,10 +1603,12 @@ class MiChroM:
                 The interval (in time steps) at which to report data.
                 (Default: `1000`)
         """
+        if outputName is None:
+            outputName = self.name
 
         if traj:
             save_structure_reporter = SaveStructure(
-                filePrefix=f"{self.name}",
+                filePrefix=f'{outputName}',
                 reportInterval=interval,
                 mode=trajFormat,
                 folder=self.folder,
@@ -1640,6 +1636,7 @@ class MiChroM:
                     reportPerForceGroup=False,
                 )
                 self.simulation.reporters.append(simulation_reporter)
+                
 
 
     def run(self, nsteps, report=True, interval=10**4, totalSteps=None, checkSystem=False, blockSize=1000):
@@ -1799,7 +1796,8 @@ class MiChroM:
         self.addFlatBottomHarmonic(kR=5 * 10**-3, nRad=15.0)
         self.createSimulation()
 
-    def loadNDB(self, NDBfiles=None):
+
+    def loadNDB(self, NDBfiles=None, isRing=False):
         R"""
         Loads a single or multiple *.ndb* files and gets position and types of the chromosome beads.
         Details about the NDB file format can be found at the `Nucleome Data Bank <https://ndb.rice.edu/ndb-format>`__.
@@ -1810,6 +1808,10 @@ class MiChroM:
 
             NDBfiles (file, required):
                 Single or multiple files in *.ndb* file format.  (Default value: :code:`None`).
+                
+            isRing (bool, optional):
+                Whether the chromosome chain is circular or not (used to simulate bacteria genome, for example). If :code:`bool(isRing)` is :code:`True` , the first and last particles of the chain are linked, forming a ring. (Default value = :code:`False`).
+                
         Returns:
             :math:`(N, 3)` :class:`numpy.ndarray`:
                 Returns an array of positions.
@@ -1842,9 +1844,13 @@ class MiChroM:
                     sizeChain += 1
                 elif line[0] == "TER" or line[0] == "END":
                     break
-
-            chains.append((start, sizeChain - 1, 0))
-            start = sizeChain
+            
+            if (isRing):
+                chains.append((start, sizeChain-1, 1))
+            else:
+                chains.append((start, sizeChain-1, 0))
+                
+            start = sizeChain 
 
         print("Chains: ", chains)
 
@@ -1860,9 +1866,10 @@ class MiChroM:
 
         self.setChains(chains)
 
-        return np.vstack([x, y, z]).T
-
-    def loadGRO(self, GROfiles=None, ChromSeq=None):
+        return np.vstack([x,y,z]).T
+    
+    
+    def loadGRO(self, GROfiles=None, ChromSeq=None, isRing=False):
         R"""
         Loads a single or multiple *.gro* files and gets position and types of the chromosome beads.
         Initially, the MiChroM energy function was implemented in GROMACS. Details on how to run and use these files can be found at the `Nucleome Data Bank <https://ndb.rice.edu/GromacsInput-Documentation>`__.
@@ -1876,7 +1883,10 @@ class MiChroM:
             ChromSeq (list of files, optional):
                 List of files with sequence information for each chromosomal chain. The first column should contain the locus index. The second column should have the locus type annotation. A template of the chromatin sequence of types file can be found at the `Nucleome Data Bank (NDB) <https://ndb.rice.edu/static/text/chr10_beads.txt>`__.
                 If the chromatin types considered are different from the ones used in the original MiChroM (A1, A2, B1, B2, B3, B4, and NA), the sequence file must be provided, otherwise all the chains will be defined with 'NA' type.
-
+            
+            isRing (bool, optional):
+                Whether the chromosome chain is circular or not (used to simulate bacteria genome, for example). If :code:`bool(isRing)` is :code:`True` , the first and last particles of the chain are linked, forming a ring. (Default value = :code:`False`).
+                
         Returns:
             :math:`(N, 3)` :class:`numpy.ndarray`:
                 Returns an array of positions.
@@ -1920,9 +1930,13 @@ class MiChroM:
                 typesLetter.append(self._aa2types(pos[t][0][-3:]))
                 sizeChain += 1
 
-            chains.append((start, sizeChain - 1, 0))
-            start = sizeChain
-
+            if (isRing):
+                chains.append((start, sizeChain-1, 1))
+            else:
+                chains.append((start, sizeChain-1, 0))
+            
+            start = sizeChain 
+            
         if not ChromSeq is None:
 
             if len(ChromSeq) != len(GROfiles):
@@ -1967,7 +1981,7 @@ class MiChroM:
         else:
             return "NA"
 
-    def loadPDB(self, PDBfiles=None, ChromSeq=None):
+    def loadPDB(self, PDBfiles=None, ChromSeq=None, isRing=False):
         R"""
         Loads a single or multiple *.pdb* files and gets position and types of the chromosome beads.
         Here we consider the chromosome beads as the carbon-alpha to mimic a protein. This trick helps to use the standard macromolecules visualization software.
@@ -1980,6 +1994,9 @@ class MiChroM:
             ChromSeq (list of files, optional):
                 List of files with sequence information for each chromosomal chain. The first column should contain the locus index. The second column should have the locus type annotation. A template of the chromatin sequence of types file can be found at the `Nucleome Data Bank (NDB) <https://ndb.rice.edu/static/text/chr10_beads.txt>`__.
                 If the chromatin types considered are different from the ones used in the original MiChroM (A1, A2, B1, B2, B3, B4, and NA), the sequence file must be provided, otherwise all the chains will be defined with 'NA' type.
+            
+            isRing (bool, optional):
+                Whether the chromosome chain is circular or not (used to simulate bacteria genome, for example). If :code:`bool(isRing)` is :code:`True` , the first and last particles of the chain are linked, forming a ring. (Default value = :code:`False`).
 
         Returns:
             :math:`(N, 3)` :class:`numpy.ndarray`:
@@ -2025,8 +2042,12 @@ class MiChroM:
                     typesLetter.append(self._aa2types(pos[t][3]))
                     sizeChain += 1
 
-            chains.append((start, sizeChain - 1, 0))
-            start = sizeChain
+            if (isRing):
+                chains.append((start, sizeChain-1, 1))
+            else:
+                chains.append((start, sizeChain-1, 0))
+                
+            start = sizeChain 
 
         if not ChromSeq is None:
 
@@ -2178,19 +2199,20 @@ class MiChroM:
 
         return random.choices(population=[0, 1, 2, 3, 4, 5], k=Nbeads)
 
-    def _translate_type(self, filename, chromosome=None):
+    def _translate_type(self, fileName, chromosome=None):
         R"""Internal function that converts the letters of the types numbers following the rule: 'A1':0, 'A2':1, 'B1':2, 'B2':3,'B3':4,'B4':5, 'NA' :6.
 
-        Args:
+            fileName (file, required):
+                Chromatin sequence of types file. The first column should contain the locus index. The second column should have the locus type annotation. A template of the chromatin sequence of types file can be found at the `Nucleome Data Bank (NDB) <https://ndb.rice.edu/static/text/chr10_beads.txt>`_.
 
            filename (file, required):
                Chromatin sequence of types file. The first column should contain the locus index. The second column should have the locus type annotation. A template of the chromatin sequence of types file can be found at the `Nucleome Data Bank (NDB) <https://ndb.rice.edu/static/text/chr10_beads.txt>`_.
 
         """
 
-        _, extension = os.path.splitext(filename)
-        if extension == ".bed":
-            pos = self.loadBed(filename, chromosome)
+        _, extension = os.path.splitext(fileName)
+        if extension == '.bed':
+            pos = self.loadBed(fileName, chromosome)
             self.type_list_letter = pos
             self.diff_types = list(set(pos))
         else:
@@ -2198,7 +2220,7 @@ class MiChroM:
             self.diff_types = []
             self.type_list_letter = []
 
-            af = open(filename, "r")
+            af = open(fileName,'r')
             pos = af.read().splitlines()
 
             for t in range(len(pos)):
@@ -2315,8 +2337,8 @@ class MiChroM:
             If the chromatin types considered are different from the ones used in the original MiChroM (A1, A2, B1, B2, B3, B4, and NA), the sequence file must be provided when loading .pdb or .gro files, otherwise, all the chains will be defined with 'NA' type. For the .ndb files, the sequence used is the one provided in the file.
 
         isRing (bool, optional):
-            Whether the chromosome chain is circular or not (used to simulate bacteria genome, for example). To be used with the option :code:`'random'`. If :code:`bool(isRing)` is :code:`True` , the first and last particles of the chain are linked, forming a ring. (Default value = :code:`False`).
-
+            Whether the chromosome chain is circular or not (used to simulate bacteria genome, for example). To be used with the option :code:`'spring'`. If :code:`bool(isRing)` is :code:`True` , the first and last particles of the chain are linked, forming a ring. (Default value = :code:`False`).
+ 
         Returns:
             :math:`(N, 3)` :class:`numpy.ndarray`:
                 Returns an array of positions.
@@ -2396,9 +2418,9 @@ class MiChroM:
                     )
                 )
 
-            return self.loadNDB(NDBfiles=CoordFiles)
-
-        elif mode == "pdb":
+            return self.loadNDB(NDBfiles=CoordFiles, isRing=isRing)
+            
+        elif mode == 'pdb':
             if CoordFiles is None:
                 raise ValueError(
                     "Coordinate files required for mode '{:}'!".format(
@@ -2406,9 +2428,7 @@ class MiChroM:
                     )
                 )
 
-            return self.loadPDB(
-                PDBfiles=CoordFiles, ChromSeq=ChromSeq
-            )
+            return self.loadPDB(PDBfiles=CoordFiles,ChromSeq=ChromSeq, isRing=isRing)
 
         elif mode == "gro":
 
@@ -2419,9 +2439,7 @@ class MiChroM:
                     )
                 )
 
-            return self.loadGRO(
-                GROfiles=CoordFiles, ChromSeq=ChromSeq
-            )
+            return self.loadGRO(GROfiles=CoordFiles,ChromSeq=ChromSeq, isRing=isRing)
 
         else:
             if mode != "auto":
@@ -2429,15 +2447,15 @@ class MiChroM:
                     "Mode '{:}' not supported!".format(mode)
                 )
 
-    def saveStructure(self, filename=None, mode="gro"):
+    def saveStructure(self, fileName=None, mode="gro"):
         R"""
         Saves the 3D positions of beads during the simulation in various file formats.
 
         This method exports the simulation's bead positions to files in formats such as XYZ, PDB, GRO, and NDB. It supports multiple chains and assigns residue names based on bead types. The method ensures that the output directory exists and handles different file formats appropriately.
 
         Args:
-            filename (str, optional):
-                The name of the file to save the structure. If `None`, the filename is automatically generated using the simulation's name and current step number with the specified mode as the file extension.
+            fileName (str, optional):
+                The name of the file to save the structure. If `None`, the fileName is automatically generated using the simulation's name and current step number with the specified mode as the file extension.
                 (Default: `None`)
             mode (str, optional):
                 The file format to save the structure. Supported formats are:
@@ -2452,42 +2470,33 @@ class MiChroM:
 
         if not hasattr(self, "type_list_letter"):
             raise ValueError("Chromatin sequence not defined!")
-
-        if filename is None:
+        
+        if fileName is None:
             if len(self.chains) > 1:
-                filename_format = "{name}_{chain}_step{step}.{mode}"
+                fileName_format = "{name}_{chain}_step{step}.{mode}"
             else:
-                filename_format = "{name}_step{step}.{mode}"
+                fileName_format = "{name}_step{step}.{mode}"
         else:
             if len(self.chains) > 1:
-                filename_format = (
-                    os.path.splitext(filename)[0] + "_{chain}.{mode}"
-                )
+                fileName_format = os.path.splitext(fileName)[0] + "_{chain}.{mode}"
             else:
-                filename_format = os.path.splitext(filename)[0] + ".{mode}"
+                fileName_format = os.path.splitext(fileName)[0] + ".{mode}"
         
 
         if mode == "xyz":
 
-            filename = filename_format.format(
-                name=self.name,
-                chain=0,
-                step=self.simulation.currentStep,
-                mode=mode,
-            )
-            filename = os.path.join(self.folder, filename)
-
+            fileName = fileName_format.format(name=self.name, chain=0, step=self.simulation.currentStep, mode=mode)
+            fileName = os.path.join(self.folder, fileName)
+            
             lines = []
             lines.append(str(len(data)) + "\n")
 
             for particle in data:
-                lines.append(
-                    "{0:.3f} {1:.3f} {2:.3f}\n".format(*particle)
-                )
-            if filename == None:
+                lines.append("{0:.3f} {1:.3f} {2:.3f}\n".format(*particle))
+            if fileName == None:
                 return lines
-            elif isinstance(filename, str):
-                with open(filename, "w") as myfile:
+            elif isinstance(fileName, str):
+                with open(fileName, 'w') as myfile:
                     myfile.writelines(lines)
             else:
                 return lines
@@ -2522,13 +2531,8 @@ class MiChroM:
             ):
                 pdb_string = []
 
-                filename = filename_format.format(
-                    name=self.name,
-                    chain=chainNum,
-                    step=self.simulation.currentStep,
-                    mode=mode,
-                )
-                filename = os.path.join(self.folder, filename)
+                fileName = fileName_format.format(name=self.name, chain=chainNum, step=self.simulation.currentStep, mode=mode)
+                fileName = os.path.join(self.folder, fileName)
 
                 data_chain = data[chain[0] : chain[1] + 1]
                 types_chain = self.type_list_letter[
@@ -2577,7 +2581,7 @@ class MiChroM:
                     )
                 )
                 pdb_string.append("ENDMDL")
-                np.savetxt(filename, pdb_string, fmt="%s")
+                np.savetxt(fileName,pdb_string,fmt="%s")
 
         elif mode == "gro":
 
@@ -2611,13 +2615,11 @@ class MiChroM:
 
                 gro_string = []
 
-                filename = filename_format.format(
-                    name=self.name,
-                    chain=chainNum,
-                    step=self.simulation.currentStep,
-                    mode=mode,
-                )
-                filename = os.path.join(self.folder, filename)
+                fileName = fileName_format.format(name=self.name, chain=chainNum, step=self.simulation.currentStep, mode=mode)
+                fileName = os.path.join(self.folder, fileName)
+                
+                data_chain = data[chain[0]:chain[1]+1] 
+                types_chain = self.type_list_letter[chain[0]:chain[1]+1] 
 
                 data_chain = data[chain[0] : chain[1] + 1]
                 types_chain = self.type_list_letter[
@@ -2648,17 +2650,15 @@ class MiChroM:
                     )
 
                     totalAtom += 1
-
-                gro_string.append(
-                    str(gro_box_string.format(0.000, 0.000, 0.000))
-                )
-                np.savetxt(filename, gro_string, fmt="%s")
-
-        elif mode == "ndb":
-            ndb_string = "{0:6s} {1:8d} {2:2s} {3:6s} {4:4s} {5:8d} {6:8.3f} {7:8.3f} {8:8.3f} {9:10d} {10:10d} {11:8.3f}"
-            header_string = "{0:6s}    {1:40s}{2:9s}   {3:4s}"
-            title_string = "{0:6s}  {1:2s}{2:80s}"
-            author_string = "{0:6s}  {1:2s}{2:79s}"
+                        
+                gro_string.append(str(gro_box_string.format(0.000,0.000,0.000)))
+                np.savetxt(fileName,gro_string,fmt="%s")
+        
+        elif mode == 'ndb':
+            ndb_string     = "{0:6s} {1:8d} {2:2s} {3:6s} {4:4s} {5:8d} {6:8.3f} {7:8.3f} {8:8.3f} {9:10d} {10:10d} {11:8.3f}"
+            header_string  = "{0:6s}    {1:40s}{2:9s}   {3:4s}"
+            title_string   = "{0:6s}  {1:2s}{2:80s}"
+            author_string  = "{0:6s}  {1:2s}{2:79s}"
             expdata_string = "{0:6s}  {1:2s}{2:79s}"
             model_string = "{0:6s}     {1:4d}"
             seqchr_string = "{0:6s} {1:3d} {2:2s} {3:5d}  {4:69s}"
@@ -2677,19 +2677,12 @@ class MiChroM:
 
             def chunks(l, n):
                 n = max(1, n)
-                return [l[i : i + n] for i in range(0, len(l), n)]
-
-            for chainNum, chain in zip(
-                range(len(self.chains)), self.chains
-            ):
-                filename = filename_format.format(
-                    name=self.name,
-                    chain=chainNum,
-                    step=self.simulation.currentStep,
-                    mode=mode,
-                )
-                filename = os.path.join(self.folder, filename)
-
+                return ([l[i:i+n] for i in range(0, len(l), n)])
+            
+            for chainNum, chain in zip(range(len(self.chains)),self.chains):
+                fileName = fileName_format.format(name=self.name, chain=chainNum, step=self.simulation.currentStep, mode=mode)
+                fileName = os.path.join(self.folder, fileName)
+                
                 ndbf = []
 
                 data_chain = data[chain[0] : chain[1] + 1]
@@ -2785,12 +2778,11 @@ class MiChroM:
                     loops = self.loopPosition[chain[0] : chain[1] + 1]
                     loops.sort()
                     for p in loops:
-                        ndbf.append(
-                            loops_string.format("LOOPS", p[0], p[1])
-                        )
-
-                np.savetxt(filename, ndbf, fmt="%s")
-
+                        ndbf.append(loops_string.format("LOOPS",p[0],p[1]))
+                    
+                np.savetxt(fileName,ndbf,fmt="%s")
+   
+        
     def initPositions(self):
         R"""
         Internal function that sets the locus coordinates in the OpenMM system.
