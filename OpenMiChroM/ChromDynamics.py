@@ -621,17 +621,23 @@ class MiChroM:
         if not hasattr(self, "type_list_letter"):
             raise ValueError("Chromatin sequence not defined!")
 
+        types_eq = f"mapType_nb_{forceNumber}"
+        mu_eq = f"mu_nb_{forceNumber}"
+        rc_eq = f"rc_nb_{forceNumber}"
+        lim_eq = f"lim_nb_{forceNumber}"
+        radius_eq = f"radius_nb_{forceNumber}"
+
         energy = (
-            f"mapType_nb_{forceNumber}(t1,t2)*0.5*(1. + tanh(mu_nb_{forceNumber}*(rc_nb_{forceNumber} - dist))) * step(dist - lim_nb_{forceNumber});"
-            f"dist = r - radius_nb_{forceNumber}"
+            f"{types_eq}(t1,t2) * 0.5 * (1. + tanh({mu_eq} * ({rc_eq} - dist))) * step(dist - {lim_eq});"
+            f"dist = r - {radius_eq}"
         )
 
         nuclearBodiesForce = self.mm.CustomNonbondedForce(energy)
 
-        nuclearBodiesForce.addGlobalParameter(f"mu_nb_{forceNumber}", mu)
-        nuclearBodiesForce.addGlobalParameter(f"rc_nb_{forceNumber}", rc)
-        nuclearBodiesForce.addGlobalParameter(f"lim_nb_{forceNumber}", 0.5 * self.sigma)
-        nuclearBodiesForce.addGlobalParameter(f"radius_nb_{forceNumber}", nuclearBodyRadius)
+        nuclearBodiesForce.addGlobalParameter(mu_eq, mu)
+        nuclearBodiesForce.addGlobalParameter(rc_eq, rc)
+        nuclearBodiesForce.addGlobalParameter(lim_eq, self.sigma)
+        nuclearBodiesForce.addGlobalParameter(radius_eq, nuclearBodyRadius)
         nuclearBodiesForce.setCutoffDistance(CutoffDistance)
 
         tab = pd.read_csv(TypesTable, sep=None, engine="python")
@@ -656,7 +662,7 @@ class MiChroM:
         fTypes = self.mm.Discrete2DFunction(
             diff_types_size, diff_types_size, lambdas
         )
-        nuclearBodiesForce.addTabulatedFunction(f"mapType_nb_{forceNumber}", fTypes)
+        nuclearBodiesForce.addTabulatedFunction(types_eq, fTypes)
         nuclearBodiesForce.addPerParticleParameter("t")
 
         for i in range(self.N):
@@ -676,7 +682,7 @@ class MiChroM:
                 nuclearBodyInteractingBeads.add(i)
 
         nuclearBodiesForce.addInteractionGroup(
-            chromatinInteractingBeads, 
+            chromatinInteractingBeads,
             nuclearBodyInteractingBeads
         )
 
@@ -744,8 +750,8 @@ class MiChroM:
         )
 
         # Apply the force to all particles in the system
-        for i in range(self.N):
-            nuclearBodyExclusionForce.addParticle(i)
+        for _ in range(self.N):
+            nuclearBodyExclusionForce.addParticle(())
 
         chromatinInteractingBeads = set()
         for idx in chromatinChainIndices:
