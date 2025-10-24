@@ -19,20 +19,20 @@ class cndbTools:
         self.Type_conversion = {'A1':0, 'A2':1, 'B1':2, 'B2':3, 'B3':4, 'B4':5, 'NA':6}
         self.Type_conversionInv = {y:x for x,y in self.Type_conversion.items()}
     
-    def load(self, fileName):
+    def load(self, filename):
         R"""
         Receives the path to **cndb** or **ndb** file to perform analysis.
         
         Args:
-            fileName (file, required):
+            filename (file, required):
                 Path to cndb or ndb file. If an ndb file is given, it is converted to a cndb file and saved in the same directory.
         """
-        f_name, file_extension = os.path.splitext(fileName)
+        f_name, file_extension = os.path.splitext(filename)
         
         if file_extension == ".ndb":
-            fileName = Chrom_utils.ndb2cndb(f_name)   
+            filename = Chrom_utils.ndb2cndb(f_name)   
 
-        self.cndb = h5py.File(fileName, 'r')
+        self.cndb = h5py.File(filename, 'r')
         
         self.ChromSeq = list(self.cndb['types'])
         self.uniqueChromSeq = set(self.ChromSeq)
@@ -49,7 +49,7 @@ class cndbTools:
     
     
 
-    def ndb2cndb(self, fileName):
+    def ndb2cndb(self, filename):
         R"""
         Converts an **ndb** file format to **cndb**.
         
@@ -67,8 +67,8 @@ class cndbTools:
         atom           = "ATOM  {0:5d} {1:^4s}{2:1s}{3:3s} {4:1s}{5:4d}{6:1s}   {7:8.3f}{8:8.3f}{9:8.3f}{10:6.2f}{11:6.2f}          {12:>2s}{13:2s}"
         ter            = "TER   {0:5d}      {1:3s} {2:1s}{3:4d}{4:1s}"
 
-        file_ndb = fileName + str(".ndb")
-        name     = fileName + str(".cndb")
+        file_ndb = filename + str(".ndb")
+        name     = filename + str(".cndb")
 
         cndbf = h5py.File(name, 'w')
         
