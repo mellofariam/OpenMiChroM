@@ -928,7 +928,8 @@ class MiChroM:
         # Add the angle force to the system
         self.forceDict["AngleForce"] = angleForce
 
-    def addRepulsiveSoftCore(self, eCut=4.0, cutoffDistance=3.0):
+
+    def addRepulsiveSoftCore(self, eCut=4.0, cutoffDistance=3.0, chainIndices=None):
         R"""
         Adds a soft-core repulsive interaction that allows chain crossing, representing the activity of topoisomerase II.
 
@@ -943,7 +944,11 @@ class MiChroM:
                 Energy cost for chain crossing in units of \(k_B T\). Defaults to 4.0.
             cutoffDistance (float, optional):
                 Cutoff distance for the nonbonded interactions. Defaults to 3.0.
+            chainIndices (list of int, optional):
+                List of chain indices to which the repulsive soft-core interaction is applied.
+                If None, the interaction is applied to all chains. Defaults to None.
         """
+
         # Calculate the nonbonded cutoff distance
         nbCutoffDist = self.sigma * 2.0 ** (1.0 / 6.0)
 
@@ -980,6 +985,15 @@ class MiChroM:
         # Add particles to the force
         for _ in range(self.N):
             repulForce.addParticle(())
+
+        if chainIndices is not None:
+            interactingBeads = set()
+            for idx in chainIndices:
+                start, end, _ = self.chains[idx]
+                for i in range(start, end + 1):
+                    interactingBeads.add(i)
+
+            repulForce.addInteractionGroup(interactingBeads, interactingBeads)
 
         # Add the force to the force dictionary
         self.forceDict["RepulsiveSoftCore"] = repulForce
