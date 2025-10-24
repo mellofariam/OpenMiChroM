@@ -423,7 +423,7 @@ class MiChroM:
         self.forceDict["FlatBottomHarmonic"] = restraintForce
 
     def addSphericalConfinementLJ(
-        self, radius="density", density=0.1
+        self, radius="density", density=0.1, mode="radius"
     ):
         R"""
         Adds a spherical confinement potential to the system according to the MiChroM energy function.
@@ -447,6 +447,13 @@ class MiChroM:
             where N is the number of particles in the system.
             - The confinement potential is modeled using a shifted Lennard-Jones potential.
         """
+
+        if mode == "radius":
+            sigmaSphericalForce = self.sigma / 2
+        elif mode == "diameter":
+            sigmaSphericalForce = self.sigma
+        else:
+            raise ValueError("Mode must be either 'radius' or 'diameter'.")
         # Define the energy expression for the spherical confinement using a shifted Lennard-Jones potential
         energyExpression = (
             "(4 * epsilon * ((sigma/deltaR)^12 - (sigma/deltaR)^6) + epsilon) * step(cutoff - deltaR);"
@@ -467,9 +474,9 @@ class MiChroM:
         # Add global parameters to the force
         sphericalForce.addGlobalParameter("R", radius)
         sphericalForce.addGlobalParameter("epsilon", 1.0)
-        sphericalForce.addGlobalParameter("sigma", 1.0)
+        sphericalForce.addGlobalParameter("sigma", sigmaSphericalForce)
         sphericalForce.addGlobalParameter(
-            "cutoff", 2.0 ** (1.0 / 6.0)
+            "cutoff", 2.0 ** (1.0 / 6.0) * sigmaSphericalForce
         )
 
         # Apply the force to all particles in the system
