@@ -998,7 +998,7 @@ class MiChroM:
         # Add the force to the force dictionary
         self.forceDict["RepulsiveSoftCore"] = repulForce
 
-    def addTypetoType(self, mu=3.22, rc=1.78):
+    def addTypetoType(self, mu=3.22, rc=1.78, chainIndices=None):
         R"""
         Adds the type-to-type interactions according to the MiChroM energy function parameters reported in "Di Pierro, M., Zhang, B., Aiden, E.L., Wolynes, P.G. and Onuchic, J.N., 2016. Transferable model for chromosome architecture. Proceedings of the National Academy of Sciences, 113(43), pp.12168-12173".
 
@@ -1017,7 +1017,7 @@ class MiChroM:
         filepath = os.path.join(pt, path)
 
         self.addCustomTypes(
-            name="TypetoType", mu=mu, rc=rc, TypesTable=filepath
+            name="TypetoType", mu=mu, rc=rc, TypesTable=filepath, chainIndices=chainIndices
         )
 
     def addCustomTypes(
@@ -1027,6 +1027,7 @@ class MiChroM:
         rc=1.78,
         TypesTable=None,
         CutoffDistance=3.0,
+        chainIndices=None,        
     ):
         R"""
         Adds the type-to-type potential using custom values for interactions between the chromatin types. The parameters :math:`\mu` (mu) and rc are part of the probability of crosslink function :math:`f(r_{i,j}) = \frac{1}{2}\left( 1 + tanh\left[\mu(r_c - r_{i,j}\right] \right)`, where :math:`r_{i,j}` is the spatial distance between loci (beads) *i* and *j*.
@@ -1101,6 +1102,15 @@ class MiChroM:
         for i in range(self.N):
             value = [float(self.type_list[i])]
             crossLP.addParticle(value)
+
+        if chainIndices is not None:
+            interactingBeads = set()
+            for idx in chainIndices:
+                start, end, _ = self.chains[idx]
+                for i in range(start, end + 1):
+                    interactingBeads.add(i)
+
+            crossLP.addInteractionGroup(interactingBeads, interactingBeads)
 
         self.forceDict[name] = crossLP
 
