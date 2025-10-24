@@ -555,6 +555,131 @@ class MiChroM:
 
         self.forceDict["LaminaForce"] = laminaForce
 
+    def addNuclearBodiesInteraction(
+        self,
+        nuclearBodyRadius,
+        chromatinChainIndices,
+        nuclearBodyChainIndices,                
+        forceName="NuclearBodies",
+        forceNumber=1,
+        mu=3.22,
+        rc=1.78,
+        TypesTable=None,
+        CutoffDistance=3.0,
+    ):
+        R"""
+        Adds interaction of chromatin with the nuclear bodies, using the type-to-type potential with custom values. The parameters :math:`\mu` (mu) and rc are part of the probability of crosslink function :math:`f(r_{i,j}) = \frac{1}{2}\left( 1 + tanh\left[\mu(r_c - r_{i,j}\right] \right)`, where :math:`r_{i,j}` is the spatial distance between loci (beads) *i* and *j*.
+
+        The function receives a txt/TSV/CSV file containing the upper triangular matrix of the type-to-type interactions. A file example can be found `here <https://github.com/junioreif/OpenMiChroM/blob/main/OpenMiChroM/share/MiChroM.ff>`__.
+
+        +---+------+-------+-------+
+        |  |   A  |   B   |   C   |
+        +---+------+-------+-------+
+        |  | -0.2 | -0.25 | -0.15 |
+        +---+------+-------+-------+
+        |  |      |  -0.3 | -0.15 |
+        +---+------+-------+-------+
+        |  |      |       | -0.35 |
+        +---+------+-------+-------+
+
+        Args:
+            nuclearBodyRadius (float, required):
+                Radius of the nuclear bodies in units of σ.
+            chromatinChainIndices (list of int, required):
+                List of chain indices corresponding to chromatin chains.
+            nuclearBodyChainIndices (list of int, required):
+                List of chain indices corresponding to nuclear body chains.
+            forceName (string, required):
+                Name to Nuclear Bodies Potential. (Default value = "NuclearBodies")
+            forceNumber (int, required):
+                Number to Nuclear Bodies Potential. It prevents having global parameters
+                in OpenMM with the same name, if the function is called more than once. 
+                (Default value = 1).
+            mu (float, required):
+                Parameter in the probability of crosslink function. 
+                (Default value = 3.22).
+            rc (float, required):
+                Parameter in the probability of crosslink function, :math:`f(rc) = 0.5`.
+                (Default value = 1.78).
+            TypesTable (file, required):
+                A txt/TSV/CSV file containing the upper triangular matrix of the 
+                type-to-type interactions. (Default value: :code:`None`).
+            CutoffDistance (float, optional):
+                Cutoff distance for the nuclear bodies interaction in units of σ. 
+                (Default value = 3.0).
+        """
+
+        if forceName == "NuclearBodies":
+            forceName = f"NuclearBodies_{forceNumber}"
+
+        if forceName in self.forceDict:
+            raise ValueError(
+                f"Force '{forceName}' already exists in the system."
+            )
+
+        if not hasattr(self, "type_list_letter"):
+            raise ValueError("Chromatin sequence not defined!")
+
+        energy = (
+            f"mapType_nb_{forceNumber}(t1,t2)*0.5*(1. + tanh(mu_nb_{forceNumber}*(rc_nb_{forceNumber} - dist))) * step(dist - lim_nb_{forceNumber});"
+            f"dist = r - radius_nb_{forceNumber}"
+        )
+
+        nuclearBodiesForce = self.mm.CustomNonbondedForce(energy)
+
+        nuclearBodiesForce.addGlobalParameter(f"mu_nb_{forceNumber}", mu)
+        nuclearBodiesForce.addGlobalParameter(f"rc_nb_{forceNumber}", rc)
+        nuclearBodiesForce.addGlobalParameter(f"lim_nb_{forceNumber}", 0.5 * self.sigma)
+        nuclearBodiesForce.addGlobalParameter(f"radius_nb_{forceNumber}", 0.5 * self.sigma)
+        nuclearBodiesForce.setCutoffDistance(CutoffDistance)
+
+        tab = pd.read_csv(TypesTable, sep=None, engine="python")
+
+        header_types = list(tab.columns.values)
+
+        if not set(self.diff_types).issubset(set(header_types)):
+            errorlist = []
+            for i in self.diff_types:
+                if not (i in set(header_types)):
+                    errorlist.append(i)
+            raise ValueError(
+                "Types: {} are not present in TypesTables: {}\n".format(
+                    errorlist, header_types
+                )
+            )
+
+        diff_types_size = len(header_types)
+        lambdas = np.triu(tab.values) + np.triu(tab.values, k=1).T
+        lambdas = list(np.ravel(lambdas))
+
+        fTypes = self.mm.Discrete2DFunction(
+            diff_types_size, diff_types_size, lambdas
+        )
+        nuclearBodiesForce.addTabulatedFunction(f"mapType_nb_{forceNumber}", fTypes)
+        nuclearBodiesForce.addPerParticleParameter("t")
+
+        for i in range(self.N):
+            value = [float(self.type_list[i])]
+            nuclearBodiesForce.addParticle(value)
+
+        chromatinInteractingBeads = set()
+        for idx in chromatinChainIndices:
+            start, end, _ = self.chains[idx]
+            for i in range(start, end + 1):
+                chromatinInteractingBeads.add(i)
+
+        nuclearBodyInteractingBeads = set()
+        for idx in nuclearBodyChainIndices:
+            start, end, _ = self.chains[idx]
+            for i in range(start, end + 1):
+                nuclearBodyInteractingBeads.add(i)
+
+        nuclearBodiesForce.addInteractionGroup(
+            chromatinInteractingBeads, 
+            nuclearBodyInteractingBeads
+        )
+
+        self.forceDict[forceName] = nuclearBodiesForce
     def addFENEBonds(self, kFb=30.0, bonds=None, chainIndices=None):
         R"""
         Adds FENE (Finite Extensible Nonlinear Elastic) bonds to the system.
