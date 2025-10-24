@@ -631,7 +631,7 @@ class MiChroM:
         nuclearBodiesForce.addGlobalParameter(f"mu_nb_{forceNumber}", mu)
         nuclearBodiesForce.addGlobalParameter(f"rc_nb_{forceNumber}", rc)
         nuclearBodiesForce.addGlobalParameter(f"lim_nb_{forceNumber}", 0.5 * self.sigma)
-        nuclearBodiesForce.addGlobalParameter(f"radius_nb_{forceNumber}", 0.5 * self.sigma)
+        nuclearBodiesForce.addGlobalParameter(f"radius_nb_{forceNumber}", nuclearBodyRadius)
         nuclearBodiesForce.setCutoffDistance(CutoffDistance)
 
         tab = pd.read_csv(TypesTable, sep=None, engine="python")
