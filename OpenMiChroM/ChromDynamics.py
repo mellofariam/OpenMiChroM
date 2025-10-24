@@ -555,6 +555,7 @@ class MiChroM:
 
         self.forceDict["LaminaForce"] = laminaForce
 
+
     def addNuclearBodiesInteraction(
         self,
         nuclearBodyRadius,
@@ -680,6 +681,93 @@ class MiChroM:
         )
 
         self.forceDict[forceName] = nuclearBodiesForce
+
+
+    def addNuclearBodiesExcludedVolume(
+        self,
+        nuclearBodyRadius,
+        chromatinChainIndices,
+        nuclearBodyChainIndices,                
+        forceName="NuclearBodiesExcludedVolume",
+        forceNumber=1,
+        mode="radius",
+    ):
+        R"""
+        Adds excluded volume interaction of chromatin with the nuclear bodies, using the Lennard-Jones potential.
+
+        Args:
+            chromatinChainIndices (list of int, required):
+                List of chain indices corresponding to chromatin chains.
+            nuclearBodyChainIndices (list of int, required):
+                List of chain indices corresponding to nuclear body chains.
+            forceName (string, required):
+                Name to Nuclear Bodies Excluded Volume Potential. (Default value = "NuclearBodiesExcludedVolume")
+            forceNumber (int, required):
+                Number to Nuclear Bodies Excluded Volume Potential. It prevents having global parameters
+                in OpenMM with the same name, if the function is called more than once. 
+                (Default value = 1).
+        """
+
+        if forceName == "NuclearBodiesExcludedVolume"::
+            forceName = f"NuclearBodiesExcludedVolume_{forceNumber}"
+        
+        if forceName in self.forceDict:
+            raise ValueError(
+                f"Force '{forceName}' already exists in the system."
+            )
+        
+        if mode == "radius":
+            sigmaNBExclForce = self.sigma / 2
+        elif mode == "diameter":
+            sigmaNBExclForce = self.sigma
+        else:
+            raise ValueError("Mode must be either 'radius' or 'diameter'.")
+        
+        epsilon = f"epsilonNBExcl_{forceNumber}"
+        sigma = f"sigmaNBExcl_{forceNumber}"
+        nb_radius = f"Rnb_{forceNumber}"
+
+        energyExpression = (
+            f"(4 * {epsilon} * (({sigma}/deltaR)^12 - ({sigma}/deltaR)^6) + {epsilon}) * step(cutoff - deltaR);"
+            f"deltaR = r - {nb_radius}"
+        )
+
+        # Create the custom external force using the energy expression
+        nuclearBodyExclusionForce = self.mm.CustomNonbondedForce(energyExpression)
+
+        # Add global parameters to the force
+        nuclearBodyExclusionForce.addGlobalParameter(nb_radius, nuclearBodyRadius)
+        nuclearBodyExclusionForce.addGlobalParameter(epsilon, 1.0)
+        nuclearBodyExclusionForce.addGlobalParameter(sigma, sigmaNBExclForce)
+        nuclearBodyExclusionForce.addGlobalParameter(
+            "cutoff", 2.0 ** (1.0 / 6.0) * sigmaNBExclForce
+        )
+
+        # Apply the force to all particles in the system
+        for i in range(self.N):
+            nuclearBodyExclusionForce.addParticle(i)
+
+        chromatinInteractingBeads = set()
+        for idx in chromatinChainIndices:
+            start, end, _ = self.chains[idx]
+            for i in range(start, end + 1):
+                chromatinInteractingBeads.add(i)
+
+        nuclearBodyInteractingBeads = set()
+        for idx in nuclearBodyChainIndices:
+            start, end, _ = self.chains[idx]
+            for i in range(start, end + 1):
+                nuclearBodyInteractingBeads.add(i)
+
+        nuclearBodyExclusionForce.addInteractionGroup(
+            chromatinInteractingBeads, 
+            nuclearBodyInteractingBeads
+        )
+
+        # Add the force to the force dictionary
+        self.forceDict[forceName] = nuclearBodyExclusionForce
+
+           
     def addFENEBonds(self, kFb=30.0, bonds=None, chainIndices=None):
         R"""
         Adds FENE (Finite Extensible Nonlinear Elastic) bonds to the system.
