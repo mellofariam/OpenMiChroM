@@ -423,7 +423,7 @@ class MiChroM:
         self.forceDict["FlatBottomHarmonic"] = restraintForce
 
     def addSphericalConfinementLJ(
-        self, radius="density", density=0.1, mode="radius"
+        self, radius="density", density=0.1, mode="diameter"
     ):
         R"""
         Adds a spherical confinement potential to the system according to the MiChroM energy function.
@@ -690,7 +690,7 @@ class MiChroM:
         nuclearBodyChainIndices,                
         forceName="NuclearBodiesExcludedVolume",
         forceNumber=1,
-        mode="radius",
+        mode="diameter",
     ):
         R"""
         Adds excluded volume interaction of chromatin with the nuclear bodies, using the Lennard-Jones potential.
@@ -708,7 +708,7 @@ class MiChroM:
                 (Default value = 1).
         """
 
-        if forceName == "NuclearBodiesExcludedVolume"::
+        if forceName == "NuclearBodiesExcludedVolume":
             forceName = f"NuclearBodiesExcludedVolume_{forceNumber}"
         
         if forceName in self.forceDict:
