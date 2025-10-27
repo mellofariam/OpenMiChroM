@@ -698,12 +698,16 @@ class MiChroM:
         nuclearBodyChainIndices,                
         forceName="NuclearBodiesExcludedVolume",
         forceNumber=1,
-        mode="diameter",
+        Ecut=4.0,
+        r0=0.93,
+        k_excl=21.94,
     ):
         R"""
-        Adds excluded volume interaction of chromatin with the nuclear bodies, using the Lennard-Jones potential.
+        Adds excluded volume interaction of chromatin with the nuclear bodies, using a soft-core potential similar to function `addSelfAvoidance`. The default parameters are optimized to match the shape of the excluded volume when using the capped Lennard-Jones potential.
 
         Args:
+            nuclearBodyRadius (float, required):
+                Radius of the nuclear bodies in units of σ.
             chromatinChainIndices (list of int, required):
                 List of chain indices corresponding to chromatin chains.
             nuclearBodyChainIndices (list of int, required):
@@ -714,6 +718,15 @@ class MiChroM:
                 Number to Nuclear Bodies Excluded Volume Potential. It prevents having global parameters
                 in OpenMM with the same name, if the function is called more than once. 
                 (Default value = 1).
+            Ecut (float, required):
+                Energy cutoff for the excluded volume interaction in units of ε. (Default value = 4.0).
+            r0 (float, required):
+                Parameter in the excluded volume force equation. Sets the distance at which the force is half of its maximum value. (Default value = 0.93).
+            k_excl (float, required):
+                Parameter in the excluded volume force equation. Sets the steepness of the force. (Default value = 21.94).
+        
+        Returns:
+            None
         """
 
         if forceName == "NuclearBodiesExcludedVolume":
@@ -724,32 +737,25 @@ class MiChroM:
                 f"Force '{forceName}' already exists in the system."
             )
         
-        if mode == "radius":
-            sigmaNBExclForce = self.sigma / 2
-        elif mode == "diameter":
-            sigmaNBExclForce = self.sigma
-        else:
-            raise ValueError("Mode must be either 'radius' or 'diameter'.")
-        
-        epsilon = f"epsilonNBExcl_{forceNumber}"
-        sigma = f"sigmaNBExcl_{forceNumber}"
-        nb_radius = f"Rnb_{forceNumber}"
+        Ecut *= self.epsilon
 
-        energyExpression = (
-            f"(4 * {epsilon} * (({sigma}/deltaR)^12 - ({sigma}/deltaR)^6) + {epsilon}) * step(cutoff - deltaR);"
-            f"deltaR = r - {nb_radius}"
-        )
+        Ecut_eq = f"Ecut_nbExcl_{forceNumber}"
+        k_excl_eq = f"k_excl_nbExcl_{forceNumber}"
+        r0_eq = f"r0_nbExcl_{forceNumber}"
+        R_nb_eq = f"Rnb_{forceNumber}"
+
+        energyExpression = (f"0.5 * {Ecut_eq} * (1.0 + tanh(1.0 - ({k_excl_eq} * ((r - {R_nb_eq}) - {r0_eq}))))")
 
         # Create the custom external force using the energy expression
         nuclearBodyExclusionForce = self.mm.CustomNonbondedForce(energyExpression)
 
         # Add global parameters to the force
-        nuclearBodyExclusionForce.addGlobalParameter(nb_radius, nuclearBodyRadius)
-        nuclearBodyExclusionForce.addGlobalParameter(epsilon, 1.0)
-        nuclearBodyExclusionForce.addGlobalParameter(sigma, sigmaNBExclForce)
-        nuclearBodyExclusionForce.addGlobalParameter(
-            "cutoff", 2.0 ** (1.0 / 6.0) * sigmaNBExclForce
-        )
+        nuclearBodyExclusionForce.addGlobalParameter(f"{Ecut_eq}", Ecut)
+        nuclearBodyExclusionForce.addGlobalParameter(f"{k_excl_eq}", k_excl)
+        nuclearBodyExclusionForce.addGlobalParameter(f"{r0_eq}", r0)
+        nuclearBodyExclusionForce.addGlobalParameter(f"{R_nb_eq}", nuclearBodyRadius)
+
+        nuclearBodyExclusionForce.setCutoffDistance(nuclearBodyRadius + 2.0)
 
         # Apply the force to all particles in the system
         for _ in range(self.N):
