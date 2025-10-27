@@ -606,7 +606,9 @@ class MiChroM:
                 A txt/TSV/CSV file containing the upper triangular matrix of the 
                 type-to-type interactions. (Default value: :code:`None`).
             CutoffDistance (float, optional):
-                Cutoff distance for the nuclear bodies interaction in units of σ. 
+                Cutoff distance for the nuclear bodies interaction in units of σ,
+                beyond the radius of the nuclear body. Therefore, the applied cutoff
+                distance will be :code:`nuclearBodyRadius + CutoffDistance`. 
                 (Default value = 3.0).
         """
 
@@ -636,9 +638,9 @@ class MiChroM:
 
         nuclearBodiesForce.addGlobalParameter(mu_eq, mu)
         nuclearBodiesForce.addGlobalParameter(rc_eq, rc)
-        nuclearBodiesForce.addGlobalParameter(lim_eq, self.sigma)
+        nuclearBodiesForce.addGlobalParameter(lim_eq, nuclearBodyRadius + self.sigma)
         nuclearBodiesForce.addGlobalParameter(radius_eq, nuclearBodyRadius)
-        nuclearBodiesForce.setCutoffDistance(CutoffDistance)
+        nuclearBodiesForce.setCutoffDistance(nuclearBodyRadius + CutoffDistance)
 
         tab = pd.read_csv(TypesTable, sep=None, engine="python")
 
