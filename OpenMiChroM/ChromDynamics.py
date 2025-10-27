@@ -1531,7 +1531,7 @@ class MiChroM:
                 harmonicBondForce.addBond(int(start), int(end), [])
                 self.bondsForException.append((int(start), int(end)))
 
-    def addSelfAvoidance(self, Ecut=4.0, k_rep=20.0, r0=1.0):
+    def addSelfAvoidance(self, Ecut=4.0, k_rep=21.94, r0=0.93, cutoffDistance=3.0, chainIndices=None):
         R"""
         This adds Soft-core self avoidance between all non-bonded monomers.
         This force is well behaved across all distances (no diverging parts)
@@ -1548,16 +1548,26 @@ class MiChroM:
         Ecut = Ecut*self.epsilon
         repul_energy = ("0.5 * Ecut * (1.0 + tanh(1.0 - (k_rep * (r - sR0))))")
         
-        self.forceDict["SelfAvoidance"] = self.mm.CustomNonbondedForce(repul_energy)
-        repulforceGr = self.forceDict["SelfAvoidance"]
+        repulforceGr = self.mm.CustomNonbondedForce(repul_energy)
         repulforceGr.addGlobalParameter('Ecut', Ecut)
         repulforceGr.addGlobalParameter('sR0', r0)
         repulforceGr.addGlobalParameter('k_rep', k_rep)
 
-        repulforceGr.setCutoffDistance(3.0)
+        repulforceGr.setCutoffDistance(cutoffDistance)
+
+        if chainIndices is not None:
+            interactingBeads = set()
+            for idx in chainIndices:
+                start, end, _ = self.chains[idx]
+                for i in range(start, end + 1):
+                    interactingBeads.add(i)
+
+            repulforceGr.addInteractionGroup(interactingBeads, interactingBeads)
 
         for _ in range(self.N):
             repulforceGr.addParticle(())
+            
+        self.forceDict["SelfAvoidance"] = repulforceGr
 
     def _getForceIndex(self, forceName):
         R""" "
