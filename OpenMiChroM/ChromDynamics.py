@@ -638,7 +638,7 @@ class MiChroM:
 
         nuclearBodiesForce.addGlobalParameter(mu_eq, mu)
         nuclearBodiesForce.addGlobalParameter(rc_eq, rc)
-        nuclearBodiesForce.addGlobalParameter(lim_eq, nuclearBodyRadius + self.sigma)
+        nuclearBodiesForce.addGlobalParameter(lim_eq, self.sigma)
         nuclearBodiesForce.addGlobalParameter(radius_eq, nuclearBodyRadius)
         nuclearBodiesForce.setCutoffDistance(nuclearBodyRadius + CutoffDistance)
 
