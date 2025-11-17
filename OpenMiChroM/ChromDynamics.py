@@ -486,6 +486,72 @@ class MiChroM:
         # Add the force to the force dictionary
         self.forceDict["SphericalConfinementLJ"] = sphericalForce
 
+    
+    def addSphericalConfinementTanh(
+        self, radius="density", density=0.1, Ecut=10.0, r0=0.93, k_conf=21.94,
+    ):
+        R"""
+        Adds a spherical confinement potential to the system according to the MiChroM energy function.
+
+        This potential describes the interaction between the chromosome and a spherical wall,
+        effectively confining the particles within a sphere of specified radius.
+
+        Args:
+            radius (float or str, optional):
+                Radius of the spherical confinement. If set to "density", the radius is calculated
+                based on the specified density. Defaults to "density".
+            density (float, optional):
+                Density of the chromosome beads inside the nucleus. Required if `radius` is "density".
+                Defaults to 0.1.
+            Ecut (float, optional):
+                Energy cutoff for the confinement potential in units of ε. Defaults to 10.0.
+            r0 (float, optional):
+                Parameter in the confinement force equation. Sets the distance at which the force is half of its maximum value. Defaults to 0.93.
+            k_conf (float, optional):
+                Parameter in the confinement force equation. Sets the steepness of the force. Defaults to 21.94.
+
+        Notes:
+            - If `radius` is "density", the radius is calculated using the formula:
+
+            radius = (3 * N / (4 * π * density)) ** (1/3)
+
+            where N is the number of particles in the system.
+            - The confinement potential is modeled using a shifted Lennard-Jones potential.
+        """
+        
+        Ecut *= self.epsilon
+
+        # Define the energy expression for the spherical confinement using a shifted Lennard-Jones potential
+        energyExpression = (
+            "0.5 * eCutConf * (1.0 + tanh(1.0 - (kConf * (deltaR - r0Conf))));"
+            "deltaR = rConf - sqrt(x^2 + y^2 + z^2)"
+        )
+
+        # Create the custom external force using the energy expression
+        sphericalForce = self.mm.CustomExternalForce(energyExpression)
+
+        # Calculate radius if set to "density"
+        if radius == "density":
+            radius = (
+                3 * self.N / (4 * 3.141592653589793 * density)
+            ) ** (1 / 3.0)
+
+        self.sphericalConfinementRadius = radius
+
+        # Add global parameters to the force
+        sphericalForce.addGlobalParameter("rConf", radius)
+        sphericalForce.addGlobalParameter("r0Conf", r0)
+        sphericalForce.addGlobalParameter("kConf", k_conf)
+        sphericalForce.addGlobalParameter("eCutConf", Ecut)
+
+        # Apply the force to all particles in the system
+        for i in range(self.N):
+            sphericalForce.addParticle(i, [])
+
+        # Add the force to the force dictionary
+        self.forceDict["SphericalConfinementTanh"] = sphericalForce
+
+
     def addLaminaInteraction(
         self,
         radius=None,
