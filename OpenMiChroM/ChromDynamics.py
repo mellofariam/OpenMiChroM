@@ -554,13 +554,13 @@ class MiChroM:
 
     def addLaminaInteraction(
         self,
-        radius=None,
-        density=0.1,
+        radius: float | None = None,
+        density: float = 0.1,
         mu=3.22,
         rc=1.78,
-        eLam=1.0,
-        subcompartments=["B2", "B3"],
-        beadIndices=None,
+        eLam: float | dict[str,float] = -1.0,
+        subcompartments: list = ["B2", "B3"],
+        beadIndices: list | None = None,
     ):
         """
         Adds lamina-chromatin interaction to the system.
@@ -578,6 +578,12 @@ class MiChroM:
         None
         """
         
+        if type(eLam) not in [float, dict]:
+            try:
+                eLam = float(eLam)
+            except:
+                raise ValueError("eLam must be either a float or a dictionary.")
+
         if radius is None:
             radius = (
                 3 * self.N / (4 * 3.141592653589793 * density)
