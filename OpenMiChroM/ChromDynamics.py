@@ -552,6 +552,52 @@ class MiChroM:
         self.forceDict["SphericalConfinementTanh"] = sphericalForce
 
 
+    def addConicConfinement(self, k=5e-3, halfOpeningAngle=np.pi/4):
+        R"""
+        Adds a flat-bottom harmonic potential with a conic shape to confine the chromosome chain on a conic shape along the z-axis.
+
+        The potential is defined as:
+
+            :math:`V(r) = step(d_{cone}) * (k / 2) * d_{cone}^2`
+        
+        with
+
+            :math:`d_{cone} = r_{xy} * cos(\\alpha) - z * sin(\\alpha)`
+
+        where:
+            - `r` is the distance from the origin (center of the nucleus)
+            - `r0` (nRad) is the nucleus radius
+            - `kR` is the spring constant of the potential
+
+        This potential applies no force when particles are inside the conic region and applies a harmonic restoring force when particles are outside.
+
+        Args:
+            k (float, required):
+                Spring constant of the harmonic potential. Defaults to 5e-3.
+            halfOpeningAngle (float, required):
+                Angle between z-axis and the side of the cone, in radians.
+                Defaults to π/4.
+        """
+        # Define the energy expression for the flat-bottom harmonic potential
+        energyExpression = (
+            "step(dCone) * 0.5 * kCone * (dCone)^2;"
+            "dCone = (sqrt(x^2 + y^2)*cos(alpha)) - z*sin(alpha)"
+        )
+
+        # Create the custom external force using the energy expression
+        conicConfinement = self.mm.CustomExternalForce(energyExpression)
+        
+        conicConfinement.addGlobalParameter("kCone", k)
+        conicConfinement.addGlobalParameter("alpha", halfOpeningAngle)
+
+        # Apply the force to all particles in the system
+        for i in range(self.N):
+            conicConfinement.addParticle(i, [])
+
+        # Add the force to the force dictionary
+        self.forceDict["ConicConfinement"] = conicConfinement
+
+
     def addLaminaInteraction(
         self,
         radius: float | None = None,
