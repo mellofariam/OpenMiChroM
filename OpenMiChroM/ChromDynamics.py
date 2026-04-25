@@ -899,6 +899,94 @@ class MiChroM:
         # Add the force to the force dictionary
         self.forceDict[forceName] = nuclearBodyExclusionForce
 
+
+    def addNuclearBodiesExcludedVolumeFromPoint(
+        self,
+        nuclearBodyRadius,
+        nuclearBodyCenter,
+        chromatinChainIndices,
+        nuclearBodyName,                
+        forceName=None,
+        Ecut=4.0,
+        r0=0.93,
+        k_excl=21.94,
+    ):
+        R"""
+        Adds excluded volume interaction of chromatin with the nuclear bodies, using a soft-core potential similar to function `addSelfAvoidance`. The default parameters are optimized to match the shape of the excluded volume when using the capped Lennard-Jones potential.
+
+        Args:
+            nuclearBodyRadius (float, required):
+                Radius of the nuclear bodies in units of σ.
+            nuclearBodyCenter (tuple of float, required):
+                XYZ coordinates of the center of the nuclear body in units of σ.
+            chromatinChainIndices (list of int, required):
+                List of chain indices corresponding to chromatin chains.
+            nuclearBodyName (string, required):
+                Name of the nuclear body.
+            forceName (string, required):
+                Name to Nuclear Bodies Excluded Volume Potential. (Default value = "NuclearBodiesExcludedVolume")
+            forceNumber (int, required):
+                Number to Nuclear Bodies Excluded Volume Potential. It prevents having global parameters
+                in OpenMM with the same name, if the function is called more than once. 
+                (Default value = 1).
+            Ecut (float, required):
+                Energy cutoff for the excluded volume interaction in units of ε. (Default value = 4.0).
+            r0 (float, required):
+                Parameter in the excluded volume force equation. Sets the distance at which the force is half of its maximum value. (Default value = 0.93).
+            k_excl (float, required):
+                Parameter in the excluded volume force equation. Sets the steepness of the force. (Default value = 21.94).
+        
+        Returns:
+            None
+        """
+
+        if forceName is None:
+            forceName = f"{nuclearBodyName}_EV"
+        
+        if forceName in self.forceDict:
+            raise ValueError(
+                f"Force '{forceName}' already exists in the system."
+            )
+        
+        Ecut *= self.epsilon
+
+        Ecut_eq = f"Ecut_nbExcl_{nuclearBodyName}"
+        k_excl_eq = f"k_excl_nbExcl_{nuclearBodyName}"
+        r0_eq = f"r0_nbExcl_{nuclearBodyName}"
+        R_nb_eq = f"radius_{nuclearBodyName}"
+        x_nb_eq = f"x_{nuclearBodyName}"
+        y_nb_eq = f"y_{nuclearBodyName}"
+        z_nb_eq = f"z_{nuclearBodyName}"
+
+        energyExpression = (
+            f"0.5 * {Ecut_eq} * (1.0 + tanh(1.0 - ({k_excl_eq} * (deltaR - {r0_eq}))));"
+            f"deltaR = (sqrt((x - {x_nb_eq})^2 + (y - {y_nb_eq})^2 + (z - {z_nb_eq})^2) - {R_nb_eq})"
+        )
+
+        # Create the custom external force using the energy expression
+        nuclearBodyExclusionForce = self.mm.CustomExternalForce(energyExpression)
+
+        # Add global parameters to the force
+        nuclearBodyExclusionForce.addGlobalParameter(f"{Ecut_eq}", Ecut)
+        nuclearBodyExclusionForce.addGlobalParameter(f"{k_excl_eq}", k_excl)
+        nuclearBodyExclusionForce.addGlobalParameter(f"{r0_eq}", r0)
+        nuclearBodyExclusionForce.addGlobalParameter(f"{R_nb_eq}", nuclearBodyRadius)
+        
+        nuclearBodyExclusionForce.addGlobalParameter(f"{x_nb_eq}", nuclearBodyCenter[0])
+        nuclearBodyExclusionForce.addGlobalParameter(f"{y_nb_eq}", nuclearBodyCenter[1])
+        nuclearBodyExclusionForce.addGlobalParameter(f"{z_nb_eq}", nuclearBodyCenter[2])
+
+        nuclearBodyExclusionForce.setCutoffDistance(nuclearBodyRadius + 2.0)
+
+        # Apply the chromatin beads in the system
+        for idx in chromatinChainIndices:
+            start, end, _ = self.chains[idx]
+            for i in range(start, end + 1):
+                nuclearBodyExclusionForce.addParticle(i, ())
+
+        # Add the force to the force dictionary
+        self.forceDict[forceName] = nuclearBodyExclusionForce
+
            
     def addFENEBonds(self, kFb=30.0, bonds=None, chainIndices=None):
         R"""
