@@ -976,8 +976,6 @@ class MiChroM:
         nuclearBodyExclusionForce.addGlobalParameter(f"{y_nb_eq}", nuclearBodyCenter[1])
         nuclearBodyExclusionForce.addGlobalParameter(f"{z_nb_eq}", nuclearBodyCenter[2])
 
-        nuclearBodyExclusionForce.setCutoffDistance(nuclearBodyRadius + 2.0)
-
         # Apply the chromatin beads in the system
         for idx in chromatinChainIndices:
             start, end, _ = self.chains[idx]
