@@ -1487,7 +1487,7 @@ class MiChroM:
         for i in range(self.N):
             IC.addParticle([i])
 
-        self.forceDict["CustomIC_chain_" + str(chainIndex)] = IC
+        self.forceDict["IdealChromosomeChain" + str(chainIndex)] = IC
 
     def addIdealChromosome(
         self,
