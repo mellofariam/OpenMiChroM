@@ -2048,7 +2048,7 @@ class MiChroM:
             print(energyInfo, file=f)
             print(f'\nPotential energy per forceGroup:\n {self.getForces()}', file=f)
 
-    def createReporters(self, statistics=True, traj=False, trajFormat="cndb", outputName=None, energyComponents=False,
+    def createReporters(self, statistics=True, traj=False, trajFormat="cndb", trajChainIndices=None, outputName=None, energyComponents=False,
                          interval=1000):
         R"""
         Configures and attaches reporters to the simulation for data collection during simulation runs.
@@ -2067,6 +2067,9 @@ class MiChroM:
             trajFormat (str, optional):
                 The file format to save the trajectory data. Options are `'cndb'`, `'swb'`,`'ndb'`, `'pdb'`, `'gro'`, `'xyz'`.
                 (Default: `'cndb'`)
+            trajChainIndices (list, optional):
+                A list of chain indices to include in the trajectory output. If `None`, all chains are included.
+                (Default: `None`)
             energyComponents (bool, optional):
                 If `True`, saves energy components per force group to a separate file named `'energyComponents.txt'` in the simulation folder.
                 Requires that `statistics` is `True`.
@@ -2084,7 +2087,7 @@ class MiChroM:
                 reportInterval=interval,
                 mode=trajFormat,
                 folder=self.folder,
-                chains=self.chains,
+                chains=self.chains if trajChainIndices is None else [self.chains[i] for i in trajChainIndices],
                 typeListLetter=self.type_list_letter,
             )
             self.simulation.reporters.append(save_structure_reporter)
